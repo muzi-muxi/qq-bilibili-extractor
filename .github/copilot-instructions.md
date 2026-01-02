@@ -13,6 +13,7 @@
   - 若 manifest 未列出 chunk 则回退为按文件名排序的 `chunks/*.jsonl`。
 - JSONL 处理：`iter_jsonl_messages(chunk_path)` 是生成器，按行解析 JSON，解析错误会被忽略（跳过该行）。
 - 链接检测：`BILI_RE` 在文件顶部定义（现在匹配 `bilibili.com` 的任意子域和 `b23.tv` 短域），`find_links_in_message` 会从消息中递归提取所有字符串并搜索链接，同时返回上下文片段与 `link_type`（`video|short|mobile|other`）。
+- 视频 ID：新增 `extract_video_id(link)` 用来从 URL 提取 BV/AV（若存在），CSV 新增 `video_id` 列（若无法提取则为空）。
 - 发送者与时间猜测：`guess_sender` 和 `guess_time` 对常见字段做启发式判断（查看函数以获取具体字段顺序）。
 - 输出 CSV 字段：`chat_name, chunk, time, sender, link, context, raw_message`（`raw_message` 被截断为前 2000 字符）。
 - Excel 支持：脚本尝试导入 `pandas` 并写入 `.xlsx`；若缺少依赖会捕获异常并提示 `pip install pandas openpyxl`。

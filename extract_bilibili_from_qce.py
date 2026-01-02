@@ -51,7 +51,7 @@ def extract_strings(obj: Any) -> Iterable[str]:
 def classify_bili_link(link: str) -> str:
     """简单分类 b站 链接类型：
     - 'short'：b23.tv 短链
-    - 'video'：包含 '/video/' 的视频页
+    - 'video'：包含 '/video/' 的视频页或含 BV/AV 标识
     - 'mobile'：m.bilibili.com 或 t.bilibili.com 等移动/社交子域
     - 'other'：其他 bilibili 链接
     """
@@ -63,6 +63,24 @@ def classify_bili_link(link: str) -> str:
     if l.startswith('https://m.') or l.startswith('https://t.') or '.m.bilibili.' in l:
         return 'mobile'
     return 'other'
+
+
+def extract_video_id(link: str) -> str:
+    """从链接中提取 BV/AV 视频 ID（若存在）。返回字符串如 'BV1xxx' 或 'av1234'，若无则返回空字符串。"""
+    import re
+    l = link
+    # 常见格式： /video/BV... , BV... 也可能出现在路径
+    m = re.search(r'BV[0-9A-Za-z]+', l)
+    if m:
+        return m.group(0)
+    m2 = re.search(r'av(\d+)', l, re.I)
+    if m2:
+        return 'av' + m2.group(1)
+    # 也尝试从查询参数或片段中查找
+    m3 = re.search(r'(?:video/)(BV[0-9A-Za-z]+)', l)
+    if m3:
+        return m3.group(1)
+    return ''
 
 
 def find_links_in_message(msg: Dict[str, Any]):
@@ -200,8 +218,8 @@ def process_export_dir(export_dir: Path, out_csv: Path, excel_path: Path = None,
     out_csv.parent.mkdir(parents=True, exist_ok=True)
     with out_csv.open('w', encoding='utf-8', newline='') as csvf:
         # 新增列：link_type（分类：short/video/mobile/other），保持向后兼容，放在 link 后面
-        # 新增列：bili_title, bili_uploader（如未启用元数据抓取则留空）
-        writer = csv.DictWriter(csvf, fieldnames=['chat_name', 'chunk', 'time', 'sender', 'link', 'link_type', 'bili_title', 'bili_uploader', 'context', 'raw_message'])
+        # 新增列：bili_title, bili_uploader，video_id（如未启用元数据抓取则留空）
+        writer = csv.DictWriter(csvf, fieldnames=['chat_name', 'chunk', 'time', 'sender', 'link', 'link_type', 'video_id', 'bili_title', 'bili_uploader', 'context', 'raw_message'])
         writer.writeheader()
 
         total_found = 0
@@ -219,12 +237,17 @@ def process_export_dir(export_dir: Path, out_csv: Path, excel_path: Path = None,
                     sender = guess_sender(msg)
                     raw = json.dumps(msg, ensure_ascii=False)
                     for link, ctx, ltype in links:
+                        video_id = extract_video_id(link)
                         bili_title = ''
                         bili_uploader = ''
                         if fetch_meta:
                             t, u = fetch_bilibili_metadata(link)
                             bili_title = t
                             bili_uploader = u
+                            # 如果未直接从 URL 提取到视频 ID，尝试从 fetched canonical URL or title (best-effort)
+                            if not video_id and bili_title:
+                                # no robust way here; leave blank unless fetching a redirect URL implemented
+                                pass
                         writer.writerow({
                             'chat_name': chat_name,
                             'chunk': chunk_path.name,
@@ -232,6 +255,7 @@ def process_export_dir(export_dir: Path, out_csv: Path, excel_path: Path = None,
                             'sender': sender,
                             'link': link,
                             'link_type': ltype,
+                            'video_id': video_id,
                             'bili_title': bili_title,
                             'bili_uploader': bili_uploader,
                             'context': ctx,

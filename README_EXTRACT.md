@@ -17,7 +17,7 @@ python extract_bilibili_from_qce.py -i "C:\Users\ASUS\.qq-chat-exporter\exports\
 - 如果希望脚本在本机运行，请在你本地的终端中执行（工具无法直接访问你用户目录外的文件）。
 - 若要过滤特定用户或时间段，我可以帮你扩展脚本（请说明筛选规则）。
 
-- 输出 CSV 现在包含额外列 `link_type`，用于区分链接类型（示例值：`video`（包含 /video/ 或 BV/AV 的页面）、`short`（b23.tv 短链）、`mobile`（m.bilibili 子域）或 `other`）。
+- 输出 CSV 现在包含额外列 `link_type`（链接类型，例如 `video|short|mobile|other`）、`video_id`（如果链接包含 BV/AV 或可从 URL 提取）、`bili_title` 和 `bili_uploader`（可选，需 `--fetch-meta` 启用网络抓取）。
 
 ## 开发与调试
 

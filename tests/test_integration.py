@@ -23,7 +23,7 @@ def test_process_export_dir_integration(tmp_path):
 
     # 创建 chunk1.jsonl，包含一个带 bilibili 链接的消息
     chunk_path = chunks_dir / "chunk1.jsonl"
-    msg = {"sender": {"name": "Alice"}, "time": "2026-01-03T00:00:00", "text": "hello https://www.bilibili.com/video/ABC"}
+    msg = {"sender": {"name": "Alice"}, "time": "2026-01-03T00:00:00", "text": "hello https://www.bilibili.com/video/BV1xK4y1x7x7"}
     with chunk_path.open('w', encoding='utf-8') as f:
         f.write(json.dumps(msg, ensure_ascii=False) + "\n")
     # 增加短链示例（追加）
@@ -56,7 +56,9 @@ def test_process_export_dir_integration(tmp_path):
     types = {r['sender']: r['link_type'] for r in rows}
     assert types['Alice'] == 'video'
     assert types['Bob'] == 'short'
-    # 验证元数据列被填充
+    # 验证 video_id 与元数据列被填充
+    ids = {r['sender']: r['video_id'] for r in rows}
+    assert ids['Alice'].startswith('BV') or ids['Alice'].startswith('av')
     titles = {r['sender']: r['bili_title'] for r in rows}
     assert titles['Alice'].startswith('Title for')
     assert titles['Bob'].startswith('Title for')

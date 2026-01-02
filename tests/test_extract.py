@@ -1,5 +1,5 @@
 import json
-from extract_bilibili_from_qce import extract_strings, find_links_in_message, guess_sender, guess_time, fetch_bilibili_metadata
+from extract_bilibili_from_qce import extract_strings, find_links_in_message, guess_sender, guess_time, fetch_bilibili_metadata, extract_video_id
 
 
 def test_extract_strings_nested():
@@ -35,6 +35,13 @@ def test_find_links_in_message_short_link():
     link, ctx, ltype = links[0]
     assert "b23.tv" in link
     assert ltype == 'short'
+
+
+def test_extract_video_id_from_bv_and_av():
+    assert extract_video_id('https://www.bilibili.com/video/BV1xK4y1x7x7') == 'BV1xK4y1x7x7'
+    assert extract_video_id('https://www.bilibili.com/video/av12345') == 'av12345'
+    assert extract_video_id('https://m.bilibili.com/video/BV2abc') == 'BV2abc'
+    assert extract_video_id('https://www.bilibili.com/watch?v=BV3def') == 'BV3def'
 
 def test_guess_sender_various_fields():
     assert guess_sender({"sender": {"name": "Alice"}}) == "Alice"
