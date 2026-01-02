@@ -1,5 +1,5 @@
 import json
-from extract_bilibili_from_qce import extract_strings, find_links_in_message, guess_sender, guess_time
+from extract_bilibili_from_qce import extract_strings, find_links_in_message, guess_sender, guess_time, fetch_bilibili_metadata
 
 
 def test_extract_strings_nested():
@@ -46,3 +46,43 @@ def test_guess_time_fields():
     assert guess_time({"time": "2026-01-03T00:00:00"}) == "2026-01-03T00:00:00"
     v = guess_time({"timeMs": 1600000000000})
     assert isinstance(v, str) and "-" in v
+
+
+def test_fetch_bilibili_metadata_video(monkeypatch):
+    sample_html = '<html><head><meta property="og:title" content="Sample Video Title"><meta name="author" content="UploaderName"></head><body></body></html>'
+
+    class DummyResp:
+        def __init__(self, text):
+            self.text = text
+        def raise_for_status(self):
+            return
+
+    def fake_get(url, timeout=6, headers=None, allow_redirects=True):
+        return DummyResp(sample_html)
+
+    import sys, types
+    fake_requests = types.SimpleNamespace(get=fake_get)
+    monkeypatch.setitem(sys.modules, 'requests', fake_requests)
+    title, uploader = fetch_bilibili_metadata('https://www.bilibili.com/video/ABC')
+    assert title == 'Sample Video Title'
+    assert uploader == 'UploaderName'
+
+
+def test_fetch_bilibili_metadata_short_link(monkeypatch):
+    sample_html = '<html><head><title>Short Link Title</title><meta name="author" content="ShortUploader"></head><body></body></html>'
+
+    class DummyResp:
+        def __init__(self, text):
+            self.text = text
+        def raise_for_status(self):
+            return
+
+    def fake_get(url, timeout=6, headers=None, allow_redirects=True):
+        return DummyResp(sample_html)
+
+    import sys, types
+    fake_requests = types.SimpleNamespace(get=fake_get)
+    monkeypatch.setitem(sys.modules, 'requests', fake_requests)
+    title, uploader = fetch_bilibili_metadata('https://b23.tv/xyz')
+    assert title == 'Short Link Title'
+    assert uploader == 'ShortUploader'

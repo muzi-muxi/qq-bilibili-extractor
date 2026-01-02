@@ -32,8 +32,17 @@ def test_process_export_dir_integration(tmp_path):
 
     out_csv = tmp_path / "out.csv"
 
-    # 运行处理函数
-    ret = process_export_dir(export_dir, out_csv, excel_path=None)
+    # 运行处理函数（启用元数据抓取，但将 fetch_bilibili_metadata monkeypatch 为固定值以避免真实网络）
+    # monkeypatch 函数会在运行时由测试注入
+    try:
+        # 如果测试环境提供了 monkeypatch fixture in scope
+        fetch_stub = lambda url: (f"Title for {url}", f"Uploader for {url}")
+        import extract_bilibili_from_qce as mod
+        mod.fetch_bilibili_metadata = fetch_stub
+    except Exception:
+        pass
+
+    ret = process_export_dir(export_dir, out_csv, excel_path=None, fetch_meta=True)
     assert ret == 0
 
     # 验证 CSV 存在并包含预期行
@@ -43,7 +52,11 @@ def test_process_export_dir_integration(tmp_path):
         rows = list(reader)
     # 应该包含两条：普通视频 + 短链
     assert len(rows) == 2
-    # 按发送者检查各自类型
+    # 按发送者检查各自类型与元数据
     types = {r['sender']: r['link_type'] for r in rows}
     assert types['Alice'] == 'video'
     assert types['Bob'] == 'short'
+    # 验证元数据列被填充
+    titles = {r['sender']: r['bili_title'] for r in rows}
+    assert titles['Alice'].startswith('Title for')
+    assert titles['Bob'].startswith('Title for')

@@ -116,7 +116,59 @@ def guess_time(msg: Dict[str, Any]):
     return ''
 
 
-def process_export_dir(export_dir: Path, out_csv: Path, excel_path: Path = None):
+def fetch_bilibili_metadata(link: str):
+    """Try to fetch and extract title and uploader from a bilibili link.
+    Returns (title, uploader) or ('','') if not available or on error.
+    Uses a short timeout and best-effort HTML parsing (og:title, meta name=author, <title>)."""
+    try:
+        import requests
+        from bs4 import BeautifulSoup
+        have_bs4 = True
+    except Exception:
+        # we'll fall back to regex parsing if bs4 not installed
+        have_bs4 = False
+
+    try:
+        resp = requests.get(link, timeout=6, headers={"User-Agent": "qq-bili-extractor/1.0"}, allow_redirects=True)
+        resp.raise_for_status()
+        text = resp.text
+        title = ''
+        uploader = ''
+        if have_bs4:
+            soup = BeautifulSoup(text, 'html.parser')
+            t = soup.find('meta', property='og:title') or soup.find('meta', attrs={'name': 'title'})
+            if t and t.get('content'):
+                title = t['content']
+            if not title and soup.title and soup.title.string:
+                title = soup.title.string.strip()
+            a = soup.find('meta', attrs={'name': 'author'})
+            if a and a.get('content'):
+                uploader = a['content']
+            if not uploader:
+                sel = soup.select_one('.username, .user-name, .up-name')
+                if sel:
+                    uploader = sel.get_text(strip=True)
+        else:
+            # simple regex fallbacks
+            import re
+            m = re.search(r'<meta[^>]*property=["\']og:title["\'][^>]*content=["\']([^"\']+)["\']', text, re.I)
+            if not m:
+                m = re.search(r'<meta[^>]*name=["\']title["\'][^>]*content=["\']([^"\']+)["\']', text, re.I)
+            if m:
+                title = m.group(1)
+            if not title:
+                m = re.search(r'<title[^>]*>([^<]+)</title>', text, re.I)
+                if m:
+                    title = m.group(1).strip()
+            m2 = re.search(r'<meta[^>]*name=["\']author["\'][^>]*content=["\']([^"\']+)["\']', text, re.I)
+            if m2:
+                uploader = m2.group(1)
+        return (title or '', uploader or '')
+    except Exception:
+        return ('', '')
+
+
+def process_export_dir(export_dir: Path, out_csv: Path, excel_path: Path = None, fetch_meta: bool = False):
     manifest_path = export_dir / 'manifest.json'
     if not manifest_path.exists():
         print(f"找不到 manifest.json (期望在 {manifest_path})，请确认你传入了正确的导出目录。")
@@ -148,7 +200,8 @@ def process_export_dir(export_dir: Path, out_csv: Path, excel_path: Path = None)
     out_csv.parent.mkdir(parents=True, exist_ok=True)
     with out_csv.open('w', encoding='utf-8', newline='') as csvf:
         # 新增列：link_type（分类：short/video/mobile/other），保持向后兼容，放在 link 后面
-        writer = csv.DictWriter(csvf, fieldnames=['chat_name', 'chunk', 'time', 'sender', 'link', 'link_type', 'context', 'raw_message'])
+        # 新增列：bili_title, bili_uploader（如未启用元数据抓取则留空）
+        writer = csv.DictWriter(csvf, fieldnames=['chat_name', 'chunk', 'time', 'sender', 'link', 'link_type', 'bili_title', 'bili_uploader', 'context', 'raw_message'])
         writer.writeheader()
 
         total_found = 0
@@ -166,6 +219,12 @@ def process_export_dir(export_dir: Path, out_csv: Path, excel_path: Path = None)
                     sender = guess_sender(msg)
                     raw = json.dumps(msg, ensure_ascii=False)
                     for link, ctx, ltype in links:
+                        bili_title = ''
+                        bili_uploader = ''
+                        if fetch_meta:
+                            t, u = fetch_bilibili_metadata(link)
+                            bili_title = t
+                            bili_uploader = u
                         writer.writerow({
                             'chat_name': chat_name,
                             'chunk': chunk_path.name,
@@ -173,6 +232,8 @@ def process_export_dir(export_dir: Path, out_csv: Path, excel_path: Path = None)
                             'sender': sender,
                             'link': link,
                             'link_type': ltype,
+                            'bili_title': bili_title,
+                            'bili_uploader': bili_uploader,
                             'context': ctx,
                             'raw_message': raw[:2000],
                         })
@@ -198,13 +259,14 @@ def main():
     ap.add_argument('-i', '--input', required=True, help='导出目录（chunked-jsonl 的文件夹）路径')
     ap.add_argument('-o', '--output', default='bilibili_links.csv', help='输出 CSV 文件路径')
     ap.add_argument('--excel', help='可选：输出 Excel 文件路径 (.xlsx)')
+    ap.add_argument('--fetch-meta', action='store_true', help='可选：为每个 bilibili 链接抓取标题与投稿人（依赖 requests & beautifulsoup4，可能较慢）')
     args = ap.parse_args()
 
     input_dir = Path(args.input)
     out_csv = Path(args.output)
     excel_path = Path(args.excel) if args.excel else None
 
-    return process_export_dir(input_dir, out_csv, excel_path)
+    return process_export_dir(input_dir, out_csv, excel_path, fetch_meta=args.fetch_meta)
 
 
 if __name__ == '__main__':
