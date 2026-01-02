@@ -5,6 +5,6 @@
 - `extract_bilibili_from_qce.py`：主要脚本（参见 `README_EXTRACT.md` 以获取使用示例）。
 - `README_EXTRACT.md`：详细使用说明与示例命令。
 
-[![Python tests](https://github.com/<owner>/<repo>/actions/workflows/python-tests.yml/badge.svg)](https://github.com/<owner>/<repo>/actions/workflows/python-tests.yml)
+[![Python tests](https://github.com/muzi-muxi/qq-bilibili-extractor/actions/workflows/python-tests.yml/badge.svg)](https://github.com/muzi-muxi/qq-bilibili-extractor/actions/workflows/python-tests.yml)
 
 License: GPL-3.0 (见 LICENSE 文件)
