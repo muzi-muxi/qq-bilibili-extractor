@@ -1,0 +1,39 @@
+import json
+from extract_bilibili_from_qce import extract_strings, find_links_in_message, guess_sender, guess_time
+
+
+def test_extract_strings_nested():
+    obj = {"a": ["hello", {"b": "world", "c": 123}], "d": None}
+    res = list(extract_strings(obj))
+    assert "hello" in res
+    assert "world" in res
+    assert "123" in res
+
+
+def test_find_links_in_message_single_link():
+    msg = {"text": "check this https://www.bilibili.com/video/BV1xK4y1x7x7 and more", "meta": {"desc": "no link"}}
+    links = find_links_in_message(msg)
+    assert len(links) == 1
+    link, ctx = links[0]
+    assert "bilibili.com" in link
+    assert "check this" in ctx
+
+
+def test_find_links_in_message_multiple_and_context():
+    msg = {"parts": ["before https://bilibili.com/video/123 ", " middle ", "and https://www.bilibili.com/video/456 end"]}
+    links = find_links_in_message(msg)
+    assert len(links) == 2
+    assert any("video/123" in l for l, _ in links)
+    assert any("video/456" in l for l, _ in links)
+
+
+def test_guess_sender_various_fields():
+    assert guess_sender({"sender": {"name": "Alice"}}) == "Alice"
+    assert guess_sender({"senderName": "Bob"}) == "Bob"
+    assert guess_sender({"nickname": "Nick"}) == "Nick"
+
+
+def test_guess_time_fields():
+    assert guess_time({"time": "2026-01-03T00:00:00"}) == "2026-01-03T00:00:00"
+    v = guess_time({"timeMs": 1600000000000})
+    assert isinstance(v, str) and "-" in v
