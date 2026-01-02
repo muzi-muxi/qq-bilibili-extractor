@@ -136,8 +136,9 @@ def guess_time(msg: Dict[str, Any]):
 
 def fetch_bilibili_metadata(link: str):
     """Try to fetch and extract title and uploader from a bilibili link.
-    Returns (title, uploader) or ('','') if not available or on error.
-    Uses a short timeout and best-effort HTML parsing (og:title, meta name=author, <title>)."""
+    Returns (title, uploader, final_url) or ('','','') if not available or on error.
+    Uses a short timeout and best-effort HTML parsing (og:title, meta name=author, <title>).
+    final_url is the resolved URL after redirects (useful for short links like b23.tv)."""
     try:
         import requests
         from bs4 import BeautifulSoup
@@ -149,6 +150,7 @@ def fetch_bilibili_metadata(link: str):
     try:
         resp = requests.get(link, timeout=6, headers={"User-Agent": "qq-bili-extractor/1.0"}, allow_redirects=True)
         resp.raise_for_status()
+        final_url = getattr(resp, 'url', link)
         text = resp.text
         title = ''
         uploader = ''
@@ -181,9 +183,9 @@ def fetch_bilibili_metadata(link: str):
             m2 = re.search(r'<meta[^>]*name=["\']author["\'][^>]*content=["\']([^"\']+)["\']', text, re.I)
             if m2:
                 uploader = m2.group(1)
-        return (title or '', uploader or '')
+        return (title or '', uploader or '', final_url)
     except Exception:
-        return ('', '')
+        return ('', '', '')
 
 
 def process_export_dir(export_dir: Path, out_csv: Path, excel_path: Path = None, fetch_meta: bool = False):
@@ -241,13 +243,12 @@ def process_export_dir(export_dir: Path, out_csv: Path, excel_path: Path = None,
                         bili_title = ''
                         bili_uploader = ''
                         if fetch_meta:
-                            t, u = fetch_bilibili_metadata(link)
+                            t, u, resolved = fetch_bilibili_metadata(link)
                             bili_title = t
                             bili_uploader = u
-                            # 如果未直接从 URL 提取到视频 ID，尝试从 fetched canonical URL or title (best-effort)
-                            if not video_id and bili_title:
-                                # no robust way here; leave blank unless fetching a redirect URL implemented
-                                pass
+                            # 如果未直接从 URL 提取到视频 ID，尝试从重定向后的 URL 提取
+                            if not video_id and resolved:
+                                video_id = extract_video_id(resolved)
                         writer.writerow({
                             'chat_name': chat_name,
                             'chunk': chunk_path.name,
