@@ -25,5 +25,22 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install pytest
-      - name: Run tests
-        run: pytest -q
+      - name: Run tests (verbose, capture failures)
+        run: |
+          pytest -vv || (
+            rc=$?
+            echo "PYTEST FAILED with exit code ${rc}"
+            echo "---- Python info ----"
+            python --version
+            python -c "import sys; print(sys.version)"
+            echo "---- pip list ----"
+            python -m pip list
+            echo "---- working dir ----"
+            pwd
+            ls -la
+            echo "---- tests listing ----"
+            ls -la tests || true
+            echo "---- print test files ----"
+            for f in tests/*.py; do echo "--- $f ---"; sed -n '1,200p' "$f"; done
+            exit ${rc}
+          )
