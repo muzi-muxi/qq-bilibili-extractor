@@ -14,18 +14,27 @@ def test_find_links_in_message_single_link():
     msg = {"text": "check this https://www.bilibili.com/video/BV1xK4y1x7x7 and more", "meta": {"desc": "no link"}}
     links = find_links_in_message(msg)
     assert len(links) == 1
-    link, ctx = links[0]
+    link, ctx, ltype = links[0]
     assert "bilibili.com" in link
     assert "check this" in ctx
+    assert ltype == 'video'
 
 
 def test_find_links_in_message_multiple_and_context():
     msg = {"parts": ["before https://bilibili.com/video/123 ", " middle ", "and https://www.bilibili.com/video/456 end"]}
     links = find_links_in_message(msg)
     assert len(links) == 2
-    assert any("video/123" in l for l, _ in links)
-    assert any("video/456" in l for l, _ in links)
+    assert any("video/123" in l for l, _, _ in links)
+    assert any("video/456" in l for l, _, _ in links)
 
+
+def test_find_links_in_message_short_link():
+    msg = {"text": "short link https://b23.tv/abc123"}
+    links = find_links_in_message(msg)
+    assert len(links) == 1
+    link, ctx, ltype = links[0]
+    assert "b23.tv" in link
+    assert ltype == 'short'
 
 def test_guess_sender_various_fields():
     assert guess_sender({"sender": {"name": "Alice"}}) == "Alice"

@@ -12,7 +12,8 @@ import re
 from pathlib import Path
 from typing import Any, Dict, Iterable
 
-BILI_RE = re.compile(r"https?://(?:www\.)?bilibili\.com[^\s,，；;\"'<>]*", re.I)
+# 匹配 bilibili 的多种域名（含子域）以及短域名 b23.tv
+BILI_RE = re.compile(r"https?://(?:[\w.-]+\.)?(?:bilibili\.com|b23\.tv)[^\s,，；;\"'<>]*", re.I)
 
 
 def iter_jsonl_messages(chunk_path: Path) -> Iterable[Dict[str, Any]]:
@@ -47,6 +48,23 @@ def extract_strings(obj: Any) -> Iterable[str]:
             return
 
 
+def classify_bili_link(link: str) -> str:
+    """简单分类 b站 链接类型：
+    - 'short'：b23.tv 短链
+    - 'video'：包含 '/video/' 的视频页
+    - 'mobile'：m.bilibili.com 或 t.bilibili.com 等移动/社交子域
+    - 'other'：其他 bilibili 链接
+    """
+    l = link.lower()
+    if 'b23.tv' in l:
+        return 'short'
+    if '/video/' in l or '/bv' in l or '/av' in l:
+        return 'video'
+    if l.startswith('https://m.') or l.startswith('https://t.') or '.m.bilibili.' in l:
+        return 'mobile'
+    return 'other'
+
+
 def find_links_in_message(msg: Dict[str, Any]):
     text = "\n".join([s for s in extract_strings(msg)])
     results = []
@@ -55,7 +73,8 @@ def find_links_in_message(msg: Dict[str, Any]):
         start = max(0, m.start() - 120)
         end = min(len(text), m.end() + 120)
         ctx = text[start:end].replace('\n', ' ')
-        results.append((link, ctx))
+        ltype = classify_bili_link(link)
+        results.append((link, ctx, ltype))
     return results
 
 
@@ -128,7 +147,8 @@ def process_export_dir(export_dir: Path, out_csv: Path, excel_path: Path = None)
     # 输出 CSV
     out_csv.parent.mkdir(parents=True, exist_ok=True)
     with out_csv.open('w', encoding='utf-8', newline='') as csvf:
-        writer = csv.DictWriter(csvf, fieldnames=['chat_name', 'chunk', 'time', 'sender', 'link', 'context', 'raw_message'])
+        # 新增列：link_type（分类：short/video/mobile/other），保持向后兼容，放在 link 后面
+        writer = csv.DictWriter(csvf, fieldnames=['chat_name', 'chunk', 'time', 'sender', 'link', 'link_type', 'context', 'raw_message'])
         writer.writeheader()
 
         total_found = 0
@@ -145,13 +165,14 @@ def process_export_dir(export_dir: Path, out_csv: Path, excel_path: Path = None)
                     time = guess_time(msg)
                     sender = guess_sender(msg)
                     raw = json.dumps(msg, ensure_ascii=False)
-                    for link, ctx in links:
+                    for link, ctx, ltype in links:
                         writer.writerow({
                             'chat_name': chat_name,
                             'chunk': chunk_path.name,
                             'time': time,
                             'sender': sender,
                             'link': link,
+                            'link_type': ltype,
                             'context': ctx,
                             'raw_message': raw[:2000],
                         })

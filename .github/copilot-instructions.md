@@ -12,7 +12,7 @@
   - 从 `export_dir/manifest.json` 读取 `manifest['chunked']`：优先使用 `chunks` 中给出的顺序和 `chunksDir`（默认 `chunks`）。
   - 若 manifest 未列出 chunk 则回退为按文件名排序的 `chunks/*.jsonl`。
 - JSONL 处理：`iter_jsonl_messages(chunk_path)` 是生成器，按行解析 JSON，解析错误会被忽略（跳过该行）。
-- 链接检测：`BILI_RE` 在文件顶部定义（匹配 `https?://(www.)?bilibili.com`），`find_links_in_message` 会从消息中递归提取所有字符串并搜索链接，同时返回上下文片段。
+- 链接检测：`BILI_RE` 在文件顶部定义（现在匹配 `bilibili.com` 的任意子域和 `b23.tv` 短域），`find_links_in_message` 会从消息中递归提取所有字符串并搜索链接，同时返回上下文片段与 `link_type`（`video|short|mobile|other`）。
 - 发送者与时间猜测：`guess_sender` 和 `guess_time` 对常见字段做启发式判断（查看函数以获取具体字段顺序）。
 - 输出 CSV 字段：`chat_name, chunk, time, sender, link, context, raw_message`（`raw_message` 被截断为前 2000 字符）。
 - Excel 支持：脚本尝试导入 `pandas` 并写入 `.xlsx`；若缺少依赖会捕获异常并提示 `pip install pandas openpyxl`。

@@ -26,6 +26,9 @@ def test_process_export_dir_integration(tmp_path):
     msg = {"sender": {"name": "Alice"}, "time": "2026-01-03T00:00:00", "text": "hello https://www.bilibili.com/video/ABC"}
     with chunk_path.open('w', encoding='utf-8') as f:
         f.write(json.dumps(msg, ensure_ascii=False) + "\n")
+    # 增加短链示例（追加）
+    with chunk_path.open('a', encoding='utf-8') as f:
+        f.write(json.dumps({"sender": {"name": "Bob"}, "time": "2026-01-03T00:05:00", "text": "check https://b23.tv/xyz"}, ensure_ascii=False) + "\n")
 
     out_csv = tmp_path / "out.csv"
 
@@ -38,8 +41,9 @@ def test_process_export_dir_integration(tmp_path):
     with out_csv.open('r', encoding='utf-8') as f:
         reader = csv.DictReader(f)
         rows = list(reader)
-    assert len(rows) == 1
-    row = rows[0]
-    assert row['chat_name'] == 'test_chat'
-    assert 'bilibili.com' in row['link']
-    assert row['sender'] == 'Alice'
+    # 应该包含两条：普通视频 + 短链
+    assert len(rows) == 2
+    # 按发送者检查各自类型
+    types = {r['sender']: r['link_type'] for r in rows}
+    assert types['Alice'] == 'video'
+    assert types['Bob'] == 'short'
