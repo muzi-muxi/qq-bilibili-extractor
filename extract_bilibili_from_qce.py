@@ -188,6 +188,72 @@ def fetch_bilibili_metadata(link: str):
         return ('', '', '')
 
 
+def write_aggregated_excel(csv_path: Path, agg_path: Path):
+    """生成聚合 Excel：按 `bili_title` 合并行，发送者列表合并为分号分隔。
+    输出列顺序：time, sender, link, link_type, video_id, bili_title, bili_uploader, context
+    返回 True on success, False on failure（例如缺少 pandas）"""
+    try:
+        import pandas as pd
+    except Exception:
+        print("生成聚合 Excel 失败（未安装 pandas）。请安装：pip install pandas openpyxl")
+        return False
+
+    df = pd.read_csv(csv_path, dtype=str).fillna('')
+    cols = ['time', 'sender', 'link', 'link_type', 'video_id', 'bili_title', 'bili_uploader', 'context']
+    missing = [c for c in cols if c not in df.columns]
+    if missing:
+        print(f"生成聚合 Excel 失败：缺少列 {missing}，无法聚合。")
+        return False
+
+    grouped_rows = []
+    # 保持原顺序：按第一次出现的 bili_title 的顺序分组
+    seen_titles = []
+    for _, row in df.iterrows():
+        t = (row.get('bili_title') or '').strip()
+        if t not in seen_titles:
+            seen_titles.append(t)
+
+    for title in seen_titles:
+        sub = df[df['bili_title'].fillna('') == title]
+        if title == '':
+            # 对于无标题的行，保留原行（不合并）
+            for _, r in sub.iterrows():
+                grouped_rows.append({c: r.get(c, '') for c in cols})
+            continue
+
+        def combine(col, sep='; '):
+            vals = [str(x).strip() for x in sub[col].astype(str).fillna('') if str(x).strip()]
+            uniq = []
+            for v in vals:
+                if v not in uniq:
+                    uniq.append(v)
+            return sep.join(uniq)
+
+        time_val = ''
+        times = [t for t in sub['time'].astype(str).fillna('') if t]
+        if times:
+            time_val = sorted(times)[0]
+        grouped_rows.append({
+            'time': time_val,
+            'sender': combine('sender', '; '),
+            'link': combine('link', '; '),
+            'link_type': combine('link_type', '; '),
+            'video_id': combine('video_id', '; '),
+            'bili_title': title,
+            'bili_uploader': combine('bili_uploader', '; '),
+            'context': ' || '.join([c for c in pd.unique(sub['context'].astype(str)) if c and c != 'nan']),
+        })
+
+    out_df = __import__('pandas').DataFrame(grouped_rows, columns=cols)
+    try:
+        out_df.to_excel(agg_path, index=False)
+        print(f"已生成聚合 Excel：{agg_path}")
+        return True
+    except Exception as e:
+        print(f"写入聚合 Excel 失败：{e}")
+        return False
+
+
 def process_export_dir(export_dir: Path, out_csv: Path, excel_path: Path = None, fetch_meta: bool = False):
     manifest_path = export_dir / 'manifest.json'
     if not manifest_path.exists():
@@ -276,6 +342,16 @@ def process_export_dir(export_dir: Path, out_csv: Path, excel_path: Path = None,
         except Exception as e:
             print(f"生成 Excel 失败（未安装 pandas 或出错）：{e}。可以用 `pip install pandas openpyxl` 后重试。")
 
+    # 可选：生成聚合 Excel（按 bili_title 合并并合并发送者）
+    agg_path = export_dir and None
+    # 由 CLI 设置的全局变量会在 main 中传入；如果存在环境变量 AGGREGATE_EXCEL 则也支持
+    try:
+        agg_arg = getattr(process_export_dir, '_aggregate_excel_arg', None)
+    except Exception:
+        agg_arg = None
+    if agg_arg:
+        write_aggregated_excel(out_csv, Path(agg_arg))
+
     return 0
 
 
@@ -285,11 +361,16 @@ def main():
     ap.add_argument('-o', '--output', default='bilibili_links.csv', help='输出 CSV 文件路径')
     ap.add_argument('--excel', help='可选：输出 Excel 文件路径 (.xlsx)')
     ap.add_argument('--fetch-meta', action='store_true', help='可选：为每个 bilibili 链接抓取标题与投稿人（依赖 requests & beautifulsoup4，可能较慢）')
+    ap.add_argument('--aggregate-excel', help='可选：生成按标题聚合的 Excel 文件（按 bili_title 合并并合并发送者）')
     args = ap.parse_args()
 
     input_dir = Path(args.input)
     out_csv = Path(args.output)
     excel_path = Path(args.excel) if args.excel else None
+
+    # 将聚合参数暂存到函数属性，方便 process_export_dir 取用（保持 API 向后兼容）
+    if args.aggregate_excel:
+        setattr(process_export_dir, '_aggregate_excel_arg', args.aggregate_excel)
 
     return process_export_dir(input_dir, out_csv, excel_path, fetch_meta=args.fetch_meta)
 
